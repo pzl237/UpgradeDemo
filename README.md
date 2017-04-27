@@ -7,6 +7,8 @@ upgrade包
 Constants类
 定义了两个变量，其中API_DOMAIN_DEBUG是测试服务器基地址，API_DOMAIN_RELEASE是正式服务器基地址，大家根据自己的实际情况填写吧。
 
+ApiCommonRequest类
+upgrade方法用于从服务器端请求最新版本的信息。
 
 注意：demo使用的是gradle版本是3.3
      targetSdkVersion是25，如果运行在系统版本在6.0及以上，记得适配权限。
