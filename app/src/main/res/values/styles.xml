@@ -1,0 +1,43 @@
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:textAppearanceSmall">@style/TextAppearance.Small</item>
+        <item name="android:textAppearanceMedium">@style/TextAppearance.Medium</item>
+        <item name="android:textAppearanceLarge">@style/TextAppearance.Large</item>
+
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+
+        <item name="android:windowBackground">@color/windowBackground</item>
+
+        <!-- swipebackhelper 右滑退出 begin -->
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowAnimationStyle">@style/SlideRightAnimation</item>
+        <!-- swipebackhelper end -->
+    </style>
+
+    <style name="UpgradeTheme" parent="AppTheme">
+        <item name="android:windowBackground">@null</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+    </style>
+
+    <!-- 小字体 -->
+    <style name="TextAppearance.Small" parent="android:style/TextAppearance.Small">
+        <item name="android:textSize">12sp</item>
+    </style>
+    <!-- 中字体 -->
+    <style name="TextAppearance.Medium" parent="android:style/TextAppearance.Medium">
+        <item name="android:textSize">14sp</item>
+    </style>
+    <!-- 大字体 -->
+    <style name="TextAppearance.Large" parent="android:style/TextAppearance.Large">
+        <item name="android:textSize">18sp</item>
+    </style>
+
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="toastHorizontalPadding">10dp</dimen>
+    <dimen name="toastVerticalPadding">8dp</dimen>
+    <dimen name="toastMaxWidth">232dp</dimen>
+    <dimen name="toastLineSpace">4dp</dimen>
+</resources>

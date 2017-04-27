@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--工具栏颜色-->
+    <color name="colorPrimary">#35B1F0</color>
+    <!--状态栏颜色-->
+    <color name="colorPrimaryDark">#202020</color>
+    <color name="colorAccent">#35B1F0</color>
+
+    <!--系统背景色-->
+    <color name="windowBackground">#f1f4f5</color>
+</resources>

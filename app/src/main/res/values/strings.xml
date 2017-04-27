@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Upgrade</string>
+    <string name="text_check_update">手动检测升级</string>
+    <string name="pleaseWait">请稍后&#8230;</string>
+    <string name="pressAgainToExit">再按一次退出程序</string>
+    <string name="checkNewVersion">正在检测新版本</string>
+</resources>
