@@ -1,5 +1,5 @@
-自从上次写了《Android检查版本升级应该怎么做？》（地址：http://www.jianshu.com/p/98ea7e866ffd）后，
-有很多同学让我提供一份demo。所以就有了UpgradeDemo演示是如何做的检查版本升级。
+自从上次写了《Android检查版本升级应该怎么做？》（地址：http://www.jianshu.com/p/98ea7e866ffd）
+后，有很多同学让我提供一份demo。所以就有了UpgradeDemo演示是如何做的检查版本升级。
 
 upgrade包
 存放核心的检查升级代码、DownloadManager下载apk文件等。具体大家详细看，有什么不明白的与我交流沟通吧。
