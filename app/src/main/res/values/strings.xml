@@ -4,4 +4,14 @@
     <string name="pleaseWait">请稍后&#8230;</string>
     <string name="pressAgainToExit">再按一次退出程序</string>
     <string name="checkNewVersion">正在检测新版本</string>
+
+    <!--升级下载-->
+    <string name="downloadFinish">下载已完成</string>
+
+    <!--应用需要必要的运行权限-->
+    <string name="no_permissions">应用需要必要的运行权限</string>
+    <string name="noPermission">没有相应权限，请在设置中打开</string>
+    <string name="string_help_text">当前应用缺少必要权限。\n\n请点击\"设置\"-\"权限\"-打开所需权限。</string>
+    <string name="cancel">取消</string>
+    <string name="setting">设置</string>
 </resources>

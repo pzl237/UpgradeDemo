@@ -92,7 +92,7 @@ public class FoundVersionInfoDialog {
                         public void onClick(@NonNull MaterialDialog dialog, @NonNull DialogAction which) {
                             dialog.dismiss();
                             if (listener != null) {
-                                listener.doIgnore();
+                                listener.doRemindMeLater();
                             }
                         }
                     }).build();

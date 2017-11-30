@@ -3,7 +3,7 @@ package com.jemlin.demo.upgrade.config;
 /**
  * 常量类
  */
-public class Constants {
+public final class Constants {
 
     public static class App {
         public static final String API_DOMAIN_DEBUG = "http://rapapi.org/mockjs/21104";

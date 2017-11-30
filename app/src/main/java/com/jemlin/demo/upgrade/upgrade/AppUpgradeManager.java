@@ -13,6 +13,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.database.ContentObserver;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
@@ -39,7 +40,8 @@ import com.jemlin.demo.upgrade.helper.NetworkHelper;
 import com.jemlin.demo.upgrade.helper.ToastHelper;
 import com.jemlin.demo.upgrade.services.ApiCommonRequest;
 import com.jemlin.demo.upgrade.services.HttpManager;
-import com.jemlin.demo.upgrade.upgrade.internal.AppUpgradePersistent;
+import com.jemlin.demo.upgrade.upgrade.internal.AppUpgradePersistentHelper;
+import com.jemlin.demo.upgrade.upgrade.internal.DownloadNotificationHelper;
 import com.jemlin.demo.upgrade.upgrade.internal.FoundVersionInfoDialog;
 import com.jemlin.demo.upgrade.upgrade.internal.PackageReceiver;
 import com.jemlin.demo.upgrade.upgrade.internal.UpgradeHelper;
@@ -51,6 +53,9 @@ import org.greenrobot.eventbus.EventBus;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import timber.log.Timber;
 
@@ -62,27 +67,18 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
     private volatile static AppUpgradeManager sAppUpgradeManager;
 
     private Context appContext;
-
     private DownloadManager downloader;
-
     private DownloadReceiver downloaderReceiver;
-
     private NotificationClickReceiver notificationClickReceiver;
-
-    private AppUpgradePersistent mAppUpgradePersistent;
-
     /**
      * 是否初始化
      */
     private boolean isInit = false;
-
     private String uriDownload;
-
     /**
      * 服务器返回的版本信息
      */
     private VersionInfo latestVersion;
-
     /**
      * true为自动检测升级，false为用户手动点击触发检测升级
      */
@@ -93,16 +89,8 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
     private String downloadApkPath;
     private CustomProgressDialog progressDialog;
 
-    private final int WHAT_ID_INSTALL_APK = 1;
-    private Handler mHandler = new Handler(Looper.getMainLooper()) {
-        @Override
-        public void handleMessage(Message msg) {
-            if (msg.what == WHAT_ID_INSTALL_APK) {
-                uriDownload = (String) msg.obj;
-                installAPKFile();
-            }
-        }
-    };
+    private ScheduledExecutorService scheduledExecutorService;
+    private DownloadChangeObserver downloadObserver;
 
     public static AppUpgradeManager getInstance() {
         if (sAppUpgradeManager == null) {
@@ -129,7 +117,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
 
         appContext = context.getApplicationContext();
         isInit = true;
-        mAppUpgradePersistent = new AppUpgradePersistent();
+
         appContext.registerReceiver(downloaderReceiver, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
         appContext.registerReceiver(notificationClickReceiver, new IntentFilter(DownloadManager.ACTION_NOTIFICATION_CLICKED));
     }
@@ -140,11 +128,18 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
         if (!isInit) {
             return;
         }
-        appContext.unregisterReceiver(downloaderReceiver);
-        appContext.unregisterReceiver(notificationClickReceiver);
+
+        if (downloaderReceiver != null) {
+            appContext.unregisterReceiver(downloaderReceiver);
+        }
+        if (notificationClickReceiver != null) {
+            appContext.unregisterReceiver(notificationClickReceiver);
+        }
+        unregisterContentObserver();
+
         isInit = false;
-        mAppUpgradePersistent = null;
         appContext = null;
+        downloadObserver = null;
     }
 
     @Override
@@ -206,7 +201,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
 
                 //与当前安装版本对比版本号，如果服务器上的版本号更大，那就需要提示更新
                 if (comparedWithCurrentPackage(versionInfo)) {
-                    mAppUpgradePersistent.saveVersionInfo(appContext, versionInfo);
+                    AppUpgradePersistentHelper.saveVersionInfo(appContext, versionInfo);
                     latestVersion = versionInfo;
 
                     UpgradeActivity.startInstance(appContext);
@@ -257,7 +252,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
             return;
         }
 
-        int versionCode = mAppUpgradePersistent.getIgnoreUpgradeVersionCode(appContext);
+        int versionCode = AppUpgradePersistentHelper.getIgnoreUpgradeVersionCode(appContext);
         if (versionCode == latestVersion.getVersionCode()) {
             //用户之前已经选择"忽略该版本"，不更新这个版本。
             Timber.d("[AppUpgradeManager] ignore upgrade version====");
@@ -295,6 +290,24 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
     }
 
     /**
+     * 注册ContentObserver
+     */
+    private void registerContentObserver() {
+        if (downloadObserver != null) {
+            appContext.getContentResolver().registerContentObserver(Uri.parse("content://downloads/my_downloads"), false, downloadObserver);
+        }
+    }
+
+    /**
+     * 注销ContentObserver
+     */
+    private void unregisterContentObserver() {
+        if (downloadObserver != null) {
+            appContext.getContentResolver().unregisterContentObserver(downloadObserver);
+        }
+    }
+
+    /**
      * DownloadManager下载apk安装包
      */
     private void downloadApk() {
@@ -316,7 +329,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
                 //比较已下载到本地的apk安装包，与服务器上apk安装包的版本号是否一致
                 if (String.valueOf(latestVersion.getVersionCode()).equals(versionCode)) {
                     //弹出框提示用户安装
-                    mHandler.obtainMessage(WHAT_ID_INSTALL_APK, downloadApkPath).sendToTarget();
+                    downLoadHandler.obtainMessage(WHAT_ID_INSTALL_APK, downloadApkPath).sendToTarget();
                     return;
                 }
             }
@@ -334,7 +347,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
         }
 
         Query query = new Query();
-        long downloadTaskId = mAppUpgradePersistent.getDownloadTaskId(appContext);
+        long downloadTaskId = AppUpgradePersistentHelper.getDownloadTaskId(appContext);
         Timber.d("[downloadApk]setFilterById:%d", downloadTaskId);
         query.setFilterById(downloadTaskId);
         Cursor cur = downloader.query(query);
@@ -356,41 +369,39 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
             cur.close();
         }
 
+        if (downloadObserver == null) {
+            downloadObserver = new DownloadChangeObserver();
+        }
+        registerContentObserver();
+
         Request task = new Request(Uri.parse(latestVersion.getDownloadUrl()));
         //定制Notification的样式
         String title = "最新版本:" + latestVersion.getVersion();
         task.setTitle(title);
         task.setDescription(latestVersion.getVersionDesc());
-
+        //如果我们希望下载的文件可以被系统的Downloads应用扫描到并管理，我们需要调用Request对象的setVisibleInDownloadsUi方法，传递参数true
         task.setVisibleInDownloadsUi(true);
         //设置是否允许手机在漫游状态下下载
-        //task.setAllowedOverRoaming(false);
-        //限定在WiFi下进行下载
-        //task.setAllowedNetworkTypes(Request.NETWORK_WIFI);
+        task.setAllowedOverRoaming(false);
+        //限定在WiFi、手机流量下进行下载
+        task.setAllowedNetworkTypes(DownloadManager.Request.NETWORK_WIFI | DownloadManager.Request.NETWORK_MOBILE);
         task.setMimeType("application/vnd.android.package-archive");
-        // 在通知栏通知下载中和下载完成
-        // 下载完成后该Notification才会被显示
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.HONEYCOMB) {
-            // 3.0(11)以后才有该方法
-            //在下载过程中通知栏会一直显示该下载的Notification，在下载完成后该Notification会继续显示，直到用户点击该Notification或者消除该Notification
-            task.setNotificationVisibility(Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-        }
+        //在通知栏通知下载中和下载完成下载完成后该Notification才会被显示3.0(11)以后才有该方法。
+        //在下载过程中通知栏会一直显示该下载的Notification，在下载完成后该Notification会继续显示，直到用户点击该Notification或者消除该Notification
+        task.setNotificationVisibility(Request.VISIBILITY_HIDDEN);
+        task.allowScanningByMediaScanner();
+
         // 可能无法创建Download文件夹，如无sdcard情况，系统会默认将路径设置为/data/data/com.android.providers.downloads/cache/xxx.apk
         if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
             String apkName = UpgradeHelper.downloadTempName(appContext.getPackageName());
             task.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, apkName);
         }
         downloadTaskId = downloader.enqueue(task);
-        mAppUpgradePersistent.saveDownloadTaskId(appContext, downloadTaskId);
-        Timber.d("[downloadApk]saveDownloadTaskId:%d", mAppUpgradePersistent.getDownloadTaskId(appContext));
+        AppUpgradePersistentHelper.saveDownloadTaskId(appContext, downloadTaskId);
+        Timber.d("[downloadApk]saveDownloadTaskId:%d", AppUpgradePersistentHelper.getDownloadTaskId(appContext));
 
-        // TODO: 2016/8/15 临时提示，后续需要删掉
-        if (BuildConfig.DEBUG) {
-            if (!isCheckLatestVersionBackground) {
-                //ToastHelper.showToast("正在后台下载更新");
-                Timber.d("[downloadApk]正在后台下载更新");
-            }
-        }
+        ToastHelper.showToast("正在后台下载更新");
+        Timber.d("[downloadApk]正在后台下载更新");
     }
 
 
@@ -451,7 +462,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
     public void doIgnore() {
         EventBus.getDefault().post(new UpgradeActivityFinishEvent());
         //忽略该版本
-        mAppUpgradePersistent.saveIgnoreUpgradeVersionCode(appContext, latestVersion.getVersionCode());
+        AppUpgradePersistentHelper.saveIgnoreUpgradeVersionCode(appContext, latestVersion.getVersionCode());
     }
 
     @Override
@@ -481,10 +492,6 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
             return;
         }
 
-        long start = System.currentTimeMillis();
-        String md5 = UpgradeHelper.calculateMD5(apkFile);
-        Timber.d("[calculateMD5] times:" + (System.currentTimeMillis() - start));
-
         Intent installIntent = new Intent();
         installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         installIntent.setAction(Intent.ACTION_VIEW);
@@ -506,6 +513,94 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
         }
     }
 
+    /**
+     * 通过query查询下载状态，包括已下载数据大小，总大小，下载状态
+     *
+     * @param downloadId 下载任务id
+     */
+    private int[] getBytesAndStatus(long downloadId) {
+        int[] bytesAndStatus = new int[]{
+                -1, -1, 0
+        };
+        DownloadManager.Query query = new DownloadManager.Query().setFilterById(downloadId);
+        Cursor cursor = null;
+        try {
+            cursor = downloader.query(query);
+            if (cursor != null && cursor.moveToFirst()) {
+                //已经下载文件大小
+                bytesAndStatus[0] = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
+                //下载文件的总大小
+                bytesAndStatus[1] = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+        return bytesAndStatus;
+    }
+
+    /**
+     * 发送Handler消息更新进度和状态
+     */
+    private void updateProgress() {
+        long downloadTaskId = AppUpgradePersistentHelper.getDownloadTaskId(appContext);
+        int[] bytesAndStatus = getBytesAndStatus(downloadTaskId);
+        downLoadHandler.sendMessage(downLoadHandler.obtainMessage(WHAT_ID_DOWNLOAD_INFO, bytesAndStatus[0], bytesAndStatus[1]));
+    }
+
+    private final int WHAT_ID_INSTALL_APK = 1;
+    private final int WHAT_ID_DOWNLOAD_INFO = 2;
+    private Handler downLoadHandler = new Handler(Looper.getMainLooper()) {
+        @Override
+        public void handleMessage(Message msg) {
+            if (msg.what == WHAT_ID_INSTALL_APK) {
+                uriDownload = (String) msg.obj;
+                installAPKFile();
+            } else if (msg.what == WHAT_ID_DOWNLOAD_INFO) {
+                //被除数可以为0，除数必须大于0
+                if (msg.arg1 >= 0 && msg.arg2 > 0) {
+                    int progress = (int) (msg.arg1 / (float) msg.arg2 * 100);
+                    Timber.e("[AppUpgradeManager] progress=%d%%", progress);
+                    String title = "最新版本:" + latestVersion.getVersion();
+                    String versionDesc = "";
+                    if (!TextUtils.isEmpty(latestVersion.getVersionDesc())) {
+                        versionDesc = latestVersion.getVersionDesc().replace("\n", "");
+                    }
+                    DownloadNotificationHelper.sendDefaultNotice(appContext, title, versionDesc, progress);
+                }
+            }
+        }
+    };
+
+    private Runnable progressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            updateProgress();
+        }
+    };
+
+    /**
+     * 监听下载进度
+     */
+    private class DownloadChangeObserver extends ContentObserver {
+
+        DownloadChangeObserver() {
+            super(downLoadHandler);
+            scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
+        }
+
+        /**
+         * 当所监听的Uri发生改变时，就会回调此方法
+         *
+         * @param selfChange 此值意义不大, 一般情况下该回调值false
+         */
+        @Override
+        public void onChange(boolean selfChange) {
+            scheduledExecutorService.scheduleAtFixedRate(progressRunnable, 0, 1, TimeUnit.SECONDS);
+        }
+    }
+
 
     /**
      * 下载完成的广播
@@ -518,7 +613,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
                 return;
             }
             long completeId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, 0);
-            long downloadTaskId = mAppUpgradePersistent.getDownloadTaskId(context);
+            long downloadTaskId = AppUpgradePersistentHelper.getDownloadTaskId(context);
             Timber.d("[DownloadReceiver] completeId=%d, downloadTaskId=%d", completeId, downloadTaskId);
             if (completeId != downloadTaskId) {
                 return;
@@ -533,15 +628,19 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
 
             int columnIndex = cur.getColumnIndex(DownloadManager.COLUMN_STATUS);
             if (DownloadManager.STATUS_SUCCESSFUL == cur.getInt(columnIndex)) {
+                //下载完成这里也要通知刷新消息通知栏
+                Timber.e("[AppUpgradeManager] download finish!");
+                updateProgress();
+
                 String uriString = cur.getString(cur.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI));
-                mHandler.obtainMessage(WHAT_ID_INSTALL_APK, uriString).sendToTarget();
+                downLoadHandler.obtainMessage(WHAT_ID_INSTALL_APK, uriString).sendToTarget();
             } else {
                 // TODO: 2016/8/15 临时提示，后续需要删掉
                 ToastHelper.showToast("下载App最新版本失败!");
                 Timber.d("[DownloadReceiver]下载最新版本失败!");
             }
             // 下载任务已经完成，清除
-            mAppUpgradePersistent.removeDownloadTaskId(context);
+            AppUpgradePersistentHelper.removeDownloadTaskId(context);
             cur.close();
         }
     }
@@ -556,7 +655,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
             long[] completeIds = intent.getLongArrayExtra(
                     DownloadManager.EXTRA_NOTIFICATION_CLICK_DOWNLOAD_IDS);
             //正在下载的任务ID
-            long downloadTaskId = mAppUpgradePersistent.getDownloadTaskId(context);
+            long downloadTaskId = AppUpgradePersistentHelper.getDownloadTaskId(context);
             if (completeIds == null || completeIds.length <= 0) {
                 openDownloadsPage(appContext);
                 return;
