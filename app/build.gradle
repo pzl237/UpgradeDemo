@@ -48,20 +48,20 @@ dependencies {
     apt 'org.greenrobot:eventbus-annotation-processor:3.0.1'
 
     // butterknife: https://github.com/JakeWharton/butterknife
-    compile 'com.jakewharton:butterknife:8.2.1'
-    apt 'com.jakewharton:butterknife-compiler:8.2.1'
+    compile 'com.jakewharton:butterknife:8.8.1'
+    apt 'com.jakewharton:butterknife-compiler:8.8.1'
 
     // gson: https://github.com/google/gson
-    compile 'com.google.code.gson:gson:2.7'
+    compile 'com.google.code.gson:gson:2.8.1'
 
     // okhttp3: https://github.com/square/okhttp
-    compile 'com.squareup.okhttp3:okhttp:3.2.0'
+    compile 'com.squareup.okhttp3:okhttp:3.9.0'
 
     // timber: https://github.com/JakeWharton/timber
-    compile 'com.jakewharton.timber:timber:4.1.2'
+    compile 'com.jakewharton.timber:timber:4.5.1'
 
     // material-dialogs: https://github.com/afollestad/material-dialogs
-    compile 'com.afollestad.material-dialogs:core:0.8.6.1'
+    compile 'com.afollestad.material-dialogs:core:0.9.4.5'
 
     // 右滑返回 swipebackhelper: https://github.com/Jude95/SwipeBackHelper
     compile 'com.jude:swipebackhelper:3.1.2'

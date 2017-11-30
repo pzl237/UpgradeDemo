@@ -339,7 +339,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
         query.setFilterById(downloadTaskId);
         Cursor cur = downloader.query(query);
         // 检查下载任务是否已经存在
-        if (cur.moveToFirst()) {
+        if (cur != null && cur.moveToFirst()) {
             int columnIndex = cur.getColumnIndex(DownloadManager.COLUMN_STATUS);
             int status = cur.getInt(columnIndex);
             if (DownloadManager.STATUS_PENDING == status || DownloadManager.STATUS_RUNNING == status || DownloadManager.STATUS_PAUSED == status) {
@@ -352,7 +352,9 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
                 return;
             }
         }
-        cur.close();
+        if (cur != null) {
+            cur.close();
+        }
 
         Request task = new Request(Uri.parse(latestVersion.getDownloadUrl()));
         //定制Notification的样式
@@ -525,7 +527,7 @@ public class AppUpgradeManager implements AppUpgrade, VersionInfoDialogListener 
             Query query = new Query();
             query.setFilterById(downloadTaskId);
             Cursor cur = downloader.query(query);
-            if (!cur.moveToFirst()) {
+            if (cur == null || !cur.moveToFirst()) {
                 return;
             }
 
